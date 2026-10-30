@@ -146,22 +146,40 @@ class Elastic(Base):
 
     @qd.func
     def _update_stress_stable_neohookean(self, mu, lam, J, F, actu, m_dir):
-        IC = F.norm_sqr()
-        dJdF0 = F[:, 1].cross(F[:, 2])
-        dJdF1 = F[:, 2].cross(F[:, 0])
-        dJdF2 = F[:, 0].cross(F[:, 1])
-        dJdF = qd.Matrix.cols([dJdF0, dJdF1, dJdF2])
-        alpha = 1 + 0.75 * mu / lam
-        stress = mu * (1 - 1 / (IC + 1)) * F + lam * (J - alpha) * dJdF
-        return stress
+        # Use the same polynomial potential as implicit integration. The shifted volumetric coefficient
+        # recovers the specified Lame parameters at rest and avoids division by det(F) near collapse.
+        lam_stable = lam + mu
+        alpha = 1.0 + mu / lam_stable
+        return mu * F + lam_stable * (J - alpha) * partialJpartialF(F)
 
     @qd.func
     def _compute_energy_gradient_hessian_stable_neohookean(self, mu, lam, J, F, actu, m_dir, i_e, i_b, hessian_field):
-        raise NotImplementedError("Hessian computation is not implemented for stable_neohookean model.")
+        lam_stable = lam + mu
+        alpha = 1.0 + mu / lam_stable
+        cofactor = partialJpartialF(F)
+        # Differentiate cof(F) through column cross products, which remain defined at singular F.
+        # The solver stores the tangent as H[J,L][i,k] = dP[i,J]/dF[k,L].
+        for k, l in qd.static(qd.ndrange(3, 3)):
+            direction = qd.Matrix.zero(gs.qd_float, 3, 3)
+            direction[k, l] = 1.0
+            dcofactor = qd.Matrix.cols(
+                [
+                    direction[:, 1].cross(F[:, 2]) + F[:, 1].cross(direction[:, 2]),
+                    direction[:, 2].cross(F[:, 0]) + F[:, 2].cross(direction[:, 0]),
+                    direction[:, 0].cross(F[:, 1]) + F[:, 0].cross(direction[:, 1]),
+                ]
+            )
+            tangent = mu * direction + lam_stable * (cofactor[k, l] * cofactor + (J - alpha) * dcofactor)
+            for i, j in qd.static(qd.ndrange(3, 3)):
+                hessian_field[i_b, j, l, i_e][i, k] = tangent[i, j]
+        return self._compute_energy_gradient_stable_neohookean(mu, lam, J, F, actu, m_dir, i_e, i_b)
 
     @qd.func
     def _compute_energy_gradient_stable_neohookean(self, mu, lam, J, F, actu, m_dir, i_e, i_b):
-        gs.raise_exception("Gradient computation is not implemented for stable_neohookean model.")
+        return (
+            self._compute_energy_stable_neohookean(mu, lam, J, F, actu, m_dir, i_e, i_b),
+            self._update_stress_stable_neohookean(mu, lam, J, F, actu, m_dir),
+        )
 
     @qd.func
     def _compute_energy_stable_neohookean(self, mu, lam, J, F, actu, m_dir, i_e, i_b):
