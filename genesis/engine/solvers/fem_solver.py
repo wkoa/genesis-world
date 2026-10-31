@@ -41,6 +41,11 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
         self._newton_dx_threshold = options.newton_dx_threshold
         self._n_pcg_iterations = options.n_pcg_iterations
         self._pcg_threshold = options.pcg_threshold
+        self._pcg_relative_tolerance = options.pcg_relative_tolerance
+        self._newton_force_atol = options.newton_force_atol
+        self._newton_force_rtol = options.newton_force_rtol
+        self._monitor_newton = options.newton_force_atol > 0 or options.newton_force_rtol > 0
+        self._force_monitor_evaluated = False
         self._n_linesearch_iterations = options.n_linesearch_iterations
         self._linesearch_c = options.linesearch_c
         self._linesearch_tau = options.linesearch_tau
@@ -72,7 +77,12 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
         self.batch_pcg_active = qd.field(dtype=gs.qd_bool, shape=(self._B,), needs_grad=False)
         self.batch_linesearch_active = qd.field(dtype=gs.qd_bool, shape=(self._B,), needs_grad=False)
 
+        self.newton_force_sq = qd.field(gs.qd_float, shape=self._B)
+        self.newton_initial_force_sq = qd.field(gs.qd_float, shape=self._B)
+        self.newton_iterations = qd.field(gs.qd_int, shape=self._B)
+        self.newton_diverged = qd.field(gs.qd_bool, shape=self._B)
         pcg_state = qd.types.struct(
+            residual_threshold=gs.qd_float,
             rTr=gs.qd_float,
             rTz=gs.qd_float,
             rTr_new=gs.qd_float,
@@ -768,7 +778,9 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
         for i_b in range(self._B):
             if not self.batch_pcg_active[i_b]:
                 continue
-            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr > self._pcg_threshold
+            threshold = qd.max(self._pcg_threshold, self._pcg_relative_tolerance**2 * self.pcg_state[i_b].rTr)
+            self.pcg_state[i_b].residual_threshold = threshold
+            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr > threshold
 
     @qd.kernel
     def one_pcg_iter(self):
@@ -800,17 +812,13 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
             qd.atomic_add(self.pcg_state[i_b].rTr_new, self.pcg_state_v[i_b, i_v].r.dot(self.pcg_state_v[i_b, i_v].r))
             qd.atomic_add(self.pcg_state[i_b].rTz_new, self.pcg_state_v[i_b, i_v].r.dot(self.pcg_state_v[i_b, i_v].z))
 
-        # check convergence
+        # Retain the residual of the iteration that converges.
         for i_b in range(self._B):
             if not self.batch_pcg_active[i_b]:
                 continue
-            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr_new > self._pcg_threshold
-
-        # update beta, rTr, rTz
-        for i_b in range(self._B):
-            if not self.batch_pcg_active[i_b]:
-                continue
-            self.pcg_state[i_b].beta = self.pcg_state[i_b].rTz_new / self.pcg_state[i_b].rTz
+            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr_new > self.pcg_state[i_b].residual_threshold
+            if self.batch_pcg_active[i_b]:
+                self.pcg_state[i_b].beta = self.pcg_state[i_b].rTz_new / self.pcg_state[i_b].rTz
             self.pcg_state[i_b].rTr = self.pcg_state[i_b].rTr_new
             self.pcg_state[i_b].rTz = self.pcg_state[i_b].rTz_new
 
@@ -826,6 +834,8 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
         self.init_pcg_solve()
         for i in range(self._n_pcg_iterations):
             self.one_pcg_iter()
+            if self._pcg_relative_tolerance > 0 and (i + 1) % 10 == 0 and not self.batch_pcg_active.to_numpy().any():
+                break
 
     @qd.kernel
     def init_linesearch(self, f: qd.i32):
@@ -917,8 +927,56 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
         for i in range(self._n_linesearch_iterations):
             self.one_linesearch_iter(f)
 
+    @qd.kernel
+    def check_newton_force(self, iteration: qd.i32):
+        for b in range(self._B):
+            if self.batch_active[b]:
+                self.newton_force_sq[b] = 0.0
+        for b, v in qd.ndrange(self._B, self.n_vertices):
+            if self.batch_active[b]:
+                self.newton_force_sq[b] += self.elements_v_energy[b, v].force.norm_sqr()
+        for b in range(self._B):
+            if self.batch_active[b]:
+                residual = self.newton_force_sq[b]
+                if iteration == 0:
+                    self.newton_initial_force_sq[b] = residual
+                threshold = qd.max(self._newton_force_atol**2,
+                                   self._newton_force_rtol**2 * self.newton_initial_force_sq[b])
+                if qd.math.isnan(residual) or qd.math.isinf(residual):
+                    self.newton_diverged[b] = True
+                    self.batch_active[b] = False
+                else:
+                    self.batch_active[b] = residual > threshold
+                if self.batch_active[b]:
+                    self.newton_iterations[b] += 1
+
+    def get_solver_stats(self):
+        """Diagnostics for the free FEM prediction, excluding subsequent coupling.
+
+        Residuals are from the last checked iterate. No force criterion is applied
+        by default; a legacy solve must not be reported as converged from its budget.
+        """
+        if not self._monitor_newton or not self._force_monitor_evaluated:
+            status = "not_evaluated" if self._monitor_newton else "not_monitored"
+            return [{"status": status, "force_residual_N": None} for _ in range(self._B)]
+        residual = self.newton_force_sq.to_numpy()
+        initial = self.newton_initial_force_sq.to_numpy()
+        iterations = self.newton_iterations.to_numpy()
+        active = self.batch_active.to_numpy()
+        diverged = self.newton_diverged.to_numpy()
+        result = []
+        for b in range(self._B):
+            finite = np.isfinite([residual[b], initial[b]]).all() and not diverged[b]
+            result.append({"status": ("iteration_limit" if active[b] else "converged") if finite else "nonfinite",
+                           "force_residual_N": float(np.sqrt(residual[b])) if finite else None,
+                           "initial_force_residual_N": float(np.sqrt(initial[b])) if finite else None,
+                           "iterations": int(iterations[b])})
+        return result
+
     def batch_solve(self, f: qd.i32):
         self.batch_active.fill(True)
+        self.newton_iterations.fill(0)
+        self.newton_diverged.fill(False)
 
         for i in range(self._n_newton_iterations):
             # compute element energy and gradient
@@ -932,6 +990,11 @@ class FEMSolver(GravityMixin, TimeBasedMixin, Solver):
             # accumulate vertex force and preconditioner
             self.accumulate_vertex_force_preconditioner(f)
 
+            if self._monitor_newton:
+                self.check_newton_force(i)
+                self._force_monitor_evaluated = True
+                if not self.batch_active.to_numpy().any():
+                    break
             # solve for the vertex positions
             self.pcg_solve()
 

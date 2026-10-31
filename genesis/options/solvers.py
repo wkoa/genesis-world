@@ -113,9 +113,9 @@ class SAPCouplerOptions(BaseCouplerOptions):
     n_linesearch_iterations : int, optional
         Max number of iterations for the line search solver. Defaults to 10.
     sap_convergence_atol : float, optional
-        Absolute tolerance for SAP convergence. Defaults to 1e-6.
+        Absolute term in the squared mass-weighted SAP gradient criterion. Defaults to 1e-6.
     sap_convergence_rtol : float, optional
-        Relative tolerance for SAP convergence. Defaults to 1e-5.
+        Multiplier of the larger squared momentum/impulse norm in the SAP criterion. Defaults to 1e-5.
     sap_taud : float, optional
         Dissipation time scale for SAP. Defaults to 0.1.
     sap_beta : float, optional
@@ -123,7 +123,10 @@ class SAPCouplerOptions(BaseCouplerOptions):
     sap_sigma : float, optional
         Friction regularization parameter for SAP. Defaults to 1e-3.
     pcg_threshold : float, optional
-        Threshold for the Preconditioned Conjugate Gradient solver. Defaults to 1e-6.
+        Absolute threshold on the squared PCG residual norm. Defaults to 1e-6.
+    pcg_relative_tolerance : float, optional
+        Relative tolerance on the PCG residual norm (not squared). Defaults to 0,
+        preserving absolute-only stopping. Uses max(pcg_threshold, rtol**2 * initial_rTr).
     linesearch_ftol : float, optional
         Line search sufficient value close to zero for exact linesearch. Defaults to 1e-6.
     linesearch_max_step_size : float, optional
@@ -156,6 +159,7 @@ class SAPCouplerOptions(BaseCouplerOptions):
     sap_taud: PositiveFloat = 0.1
     sap_beta: PositiveFloat = 1.0
     sap_sigma: PositiveFloat = 1e-3
+    pcg_relative_tolerance: NonNegativeFloat = 0.0
     pcg_threshold: PositiveFloat = 1e-6
     linesearch_ftol: PositiveFloat = 1e-6
     linesearch_max_step_size: PositiveFloat = 1.5
@@ -864,6 +868,13 @@ class FEMOptions(GravityMixin, TimeBasedMixin):
         Maximum number of Newton iterations. Defaults to 1. Only used when `use_implicit_solver` is True.
     n_pcg_iterations : int, optional
         Maximum number of PCG iterations. Defaults to 500. Only used when `use_implicit_solver` is True.
+    pcg_relative_tolerance : float, optional
+        Relative PCG residual norm tolerance. Defaults to 0 (absolute-only legacy behavior).
+    newton_force_atol : float, optional
+        Force residual norm absolute tolerance (N). Defaults to 0 (disabled).
+    newton_force_rtol : float, optional
+        Force residual norm relative tolerance. Defaults to 0 (disabled).
+        The force criteria monitor only the unconstrained FEM prediction, not the coupled step.
     n_linesearch_iterations : int, optional
         Maximum number of line search iterations. Defaults to 0. Only used when `use_implicit_solver` is True.
     newton_dx_threshold : float, optional
@@ -887,6 +898,9 @@ class FEMOptions(GravityMixin, TimeBasedMixin):
     use_implicit_solver: StrictBool = False
     n_newton_iterations: PositiveInt = 1
     n_pcg_iterations: PositiveInt = 500
+    pcg_relative_tolerance: NonNegativeFloat = 0.0
+    newton_force_atol: NonNegativeFloat = 0.0
+    newton_force_rtol: NonNegativeFloat = 0.0
     n_linesearch_iterations: NonNegativeInt = 0
     newton_dx_threshold: PositiveFloat = 1e-6
     pcg_threshold: PositiveFloat = 1e-6

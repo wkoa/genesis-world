@@ -85,3 +85,46 @@ still has about 1.89 mm geometric contact overlap. It is not a non-penetration a
 The polynomial and physical-moduli mapping agree with the SNK1 specification in the sibling
 `wkoa/libuipc` fork, constitution UID 10. Its runtime backend and Genesis's material implementation
 remain separate; no cross-engine dynamic equivalence is claimed.
+
+
+## Opt-in convergence controls (1.4.5+simulation.2)
+
+The constitutive energy, stress and exact Hessian are unchanged. This revision adds
+independent convergence controls for the free FEM prediction and the SAP velocity solve.
+It does not implement PSD projection, nonlinear monolithic coupling, CCD or a no-penetration guarantee.
+
+Both `FEMOptions` and `SAPCouplerOptions` accept `pcg_relative_tolerance` (default 0).
+PCG compares the squared Euclidean residual to
+`max(pcg_threshold, pcg_relative_tolerance**2 * initial_residual_squared)`.
+The existing `pcg_threshold` remains a **squared** absolute tolerance, preserving default stopping.
+The final converged linear residual is now recorded, rather than the previous iteration's value.
+Relative mode may synchronize the device to stop fully inactive loops early; no GPU performance is asserted.
+
+`FEMOptions.newton_force_atol` (N) and `newton_force_rtol` default to 0, disabling the new
+Newton force check. When enabled, the force norm is compared to the larger absolute or relative
+threshold; non-finite forces are explicitly reported. These criteria apply only to the free
+prediction, before contact coupling. Legacy runs are reported as `not_monitored`, not converged.
+
+`scene.sim.fem_solver.get_solver_stats()` and `scene.sim.coupler.get_solver_stats()` return
+per-environment diagnostics. Readback synchronizes the device. Residuals are the last checked
+iterate; a budget-exhausted solve remains conservatively `iteration_limit`. An unsolved/no-contact
+step does not expose stale residuals. SAP diagnostics describe only the contact velocity problem.
+A converged free prediction plus a converged SAP solve does not prove the full nonlinear step is balanced.
+
+Validation in the Studio study found that the legacy SAP absolute PCG threshold prematurely
+truncates millimeter-scale contact solves. Tightening it removes the extreme coarse/fine
+maximum-displacement discrepancy, but common-boundary refinement still differs and penetration
+remains. An independent force-balance probe also observes a substantial post-coupling residual
+when both subproblems meet their own tolerances. These are research limitations, not accepted accuracy.
+The disabled-default regression reproduces all 61 body frames and head coordinates of the legacy study.
+
+CPU FP64 checks:
+
+```bash
+PYTHONPATH=. /path/to/python -m unittest tests.deformable.test_sap_convergence tests.deformable.test_fem_convergence tests.deformable.test_fem_constitutive -v
+```
+
+The compiled probes test residual-scale stopping, legacy behavior, truthful diagnostics and
+non-finite force handling. The original 80-state derivative/objectivity test remains separate.
+Only source-based research execution is validated here; this is not a published wheel or a
+Studio registered-runtime upgrade. Linux/Windows native and accelerator paths remain unverified.

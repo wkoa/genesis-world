@@ -200,6 +200,7 @@ class SAPCoupler(RBC):
         self._sap_beta = options.sap_beta
         self._sap_sigma = options.sap_sigma
         self._pcg_threshold = options.pcg_threshold
+        self._pcg_relative_tolerance = options.pcg_relative_tolerance
         self._linesearch_ftol = options.linesearch_ftol
         self._linesearch_max_step_size = options.linesearch_max_step_size
         self._hydroelastic_stiffness = options.hydroelastic_stiffness
@@ -583,6 +584,9 @@ class SAPCoupler(RBC):
         self.batch_pcg_active = qd.field(dtype=gs.qd_bool, shape=(self.sim._B,), needs_grad=False)
 
         pcg_state = qd.types.struct(
+            initial_rTr=gs.qd_float,
+            residual_threshold=gs.qd_float,
+            iterations=gs.qd_int,
             rTr=gs.qd_float,
             rTz=gs.qd_float,
             rTr_new=gs.qd_float,
@@ -711,6 +715,54 @@ class SAPCoupler(RBC):
             self.sap_solve(i_step)
             self.update_vel(i_step, dofs_state=self.rigid_solver.dyn_state.dofs)
 
+    def get_solver_stats(self):
+        """Read last checked SAP residuals per environment (squared norms).
+
+        This synchronizes the device. An iteration-limit result is conservative:
+        the final velocity update has not been re-evaluated. Unsolved steps never
+        expose previous-step diagnostics. This does not certify FEM convergence.
+        """
+        evaluated = hasattr(self, "has_contact")
+        if not evaluated or not self.has_contact:
+            return [
+                {
+                    "status": "no_contact" if evaluated else "not_evaluated",
+                    "weighted_gradient_norm_sq": None,
+                    "convergence_threshold_sq": None,
+                    "pcg_residual_sq": None,
+                    "pcg_initial_residual_sq": None,
+                    "pcg_threshold_sq": None,
+                    "last_pcg_iterations": None,
+                }
+                for _ in range(self._B)
+            ]
+        state = self.sap_state.to_numpy()
+        pcg = self.pcg_state.to_numpy()
+        active = self.batch_active.to_numpy()
+        values = []
+        for b in range(self._B):
+            residual = float(state["gradient_norm"][b])
+            momentum = float(state["momentum_norm"][b])
+            impulse = float(state["impulse_norm"][b])
+            threshold = self._sap_convergence_atol + self._sap_convergence_rtol * max(momentum, impulse)
+            linear = float(pcg["rTr"][b])
+            initial = float(pcg["initial_rTr"][b])
+            linear_threshold = float(pcg["residual_threshold"][b])
+            finite = np.isfinite([residual, momentum, impulse, threshold, linear, initial, linear_threshold]).all()
+            converged = not active[b] and residual < threshold
+            values.append(
+                {
+                    "status": ("converged" if converged else "iteration_limit") if finite else "nonfinite",
+                    "weighted_gradient_norm_sq": residual if finite else None,
+                    "convergence_threshold_sq": threshold if finite else None,
+                    "pcg_residual_sq": linear if finite else None,
+                    "pcg_initial_residual_sq": initial if finite else None,
+                    "pcg_threshold_sq": linear_threshold if finite else None,
+                    "last_pcg_iterations": int(pcg["iterations"][b]),
+                }
+            )
+        return values
+
     @qd.kernel
     def update_vel(self, i_step: qd.i32, dofs_state: array_class.DofsState):
         if qd.static(self.fem_solver.is_active):
@@ -838,6 +890,7 @@ class SAPCoupler(RBC):
     # ------------------------------------------------------------------------------------
 
     def sap_solve(self, i_step):
+        self.pcg_state.fill(0)
         self._init_sap_solve(i_step, dofs_state=self.rigid_solver.dyn_state.dofs)
         for iter in range(self._n_sap_iterations):
             # init gradient and preconditioner
@@ -846,6 +899,8 @@ class SAPCoupler(RBC):
             # compute contact hessian and gradient
             self.compute_constraint_contact_gradient_hessian_diag_prec()
             self.check_sap_convergence(rigid_info=self.rigid_solver.rigid_info)
+            if self._pcg_relative_tolerance > 0 and not self.batch_active.to_numpy().any():
+                break
             # solve for the vertex velocity
             self.pcg_solve()
 
@@ -1113,6 +1168,7 @@ class SAPCoupler(RBC):
             self.batch_pcg_active[i_b] = self.batch_active[i_b]
             if not self.batch_pcg_active[i_b]:
                 continue
+            self.pcg_state[i_b].iterations = 0
             self.pcg_state[i_b].rTr = 0.0
             self.pcg_state[i_b].rTz = 0.0
 
@@ -1235,7 +1291,11 @@ class SAPCoupler(RBC):
         for i_b in qd.ndrange(self._B):
             if not self.batch_pcg_active[i_b]:
                 continue
-            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr > self._pcg_threshold
+            initial = self.pcg_state[i_b].rTr
+            self.pcg_state[i_b].initial_rTr = initial
+            threshold = qd.max(self._pcg_threshold, self._pcg_relative_tolerance**2 * initial)
+            self.pcg_state[i_b].residual_threshold = threshold
+            self.batch_pcg_active[i_b] = initial > threshold
 
     def one_pcg_iter(self):
         self._kernel_one_pcg_iter(
@@ -1273,6 +1333,7 @@ class SAPCoupler(RBC):
         for i_b in qd.ndrange(self._B):
             if not self.batch_pcg_active[i_b]:
                 continue
+            self.pcg_state[i_b].iterations += 1
             self.pcg_state[i_b].pTAp = 0.0
             self.pcg_state[i_b].rTr_new = 0.0
             self.pcg_state[i_b].rTz_new = 0.0
@@ -1358,16 +1419,15 @@ class SAPCoupler(RBC):
 
     @qd.func
     def check_pcg_convergence(self):
-        # check convergence
         for i_b in qd.ndrange(self._B):
             if not self.batch_pcg_active[i_b]:
                 continue
-            self.batch_pcg_active[i_b] = self.pcg_state[i_b].rTr_new > self._pcg_threshold
-        # update beta, rTr, rTz
-        for i_b in qd.ndrange(self._B):
-            if not self.batch_pcg_active[i_b]:
-                continue
-            self.pcg_state[i_b].beta = self.pcg_state[i_b].rTz_new / self.pcg_state[i_b].rTz
+            self.batch_pcg_active[i_b] = (
+                self.pcg_state[i_b].rTr_new > self.pcg_state[i_b].residual_threshold
+            )
+            if self.batch_pcg_active[i_b]:
+                self.pcg_state[i_b].beta = self.pcg_state[i_b].rTz_new / self.pcg_state[i_b].rTz
+            # Record the final residual even on the iteration that converges.
             self.pcg_state[i_b].rTr = self.pcg_state[i_b].rTr_new
             self.pcg_state[i_b].rTz = self.pcg_state[i_b].rTz_new
 
@@ -1400,6 +1460,12 @@ class SAPCoupler(RBC):
         self.init_pcg_solve(entities_info=self.rigid_solver.dyn_info.entities, rigid_info=self.rigid_solver.rigid_info)
         for i in range(self._n_pcg_iterations):
             self.one_pcg_iter()
+            if (
+                self._pcg_relative_tolerance > 0
+                and (i + 1) % 10 == 0
+                and not self.batch_pcg_active.to_numpy().any()
+            ):
+                break
 
     @qd.func
     def compute_total_energy(
