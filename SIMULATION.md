@@ -128,3 +128,25 @@ The compiled probes test residual-scale stopping, legacy behavior, truthful diag
 non-finite force handling. The original 80-state derivative/objectivity test remains separate.
 Only source-based research execution is validated here; this is not a published wheel or a
 Studio registered-runtime upgrade. Linux/Windows native and accelerator paths remain unverified.
+
+
+## Three-level mesh acceptance
+
+`examples/deformable/mesh_convergence.py` evaluates measured spatial-convergence evidence
+separately from contact acceptance. It requires at least three genuinely refined levels,
+a common domain/support/loading path, converged subproblems and balanced full steps.
+It checks decreasing field, reaction and energy differences and declared engineering tolerances.
+Completion, similar maximum displacement, or an unloaded control cannot satisfy these checks.
+The utility always leaves strict nonpenetration uncertified; it has no CCD evidence.
+
+The [TacPrint audit](research/tacprint_mesh_convergence.md) records a conforming,
+same-domain three-level study and its unresolved failures. No private geometry or trajectory
+is distributed. This extends validation of simulation.2; it adds no new physical solver algorithm
+and does not change a registered Studio runtime.
+
+```bash
+python examples/deformable/mesh_convergence.py --input STUDY.json --output acceptance.json
+python -m unittest tests.deformable.test_mesh_convergence -v
+```
+
+A rejected study exits with code 2. Unit fixtures exercise policy only and are not physical data.

@@ -1,0 +1,252 @@
+{
+  "schema": 1,
+  "solver_version": "1.4.5+simulation.2",
+  "configuration": {
+    "head_sha256": "fd37966ecbbcc86842802a69f45ed97c4e8a9976c29812c947b59679a1da9dea",
+    "head_id": "sphere",
+    "constitutive": "polynomial Stable Neo-Hookean",
+    "collider": "rigid triangles / FEM tetrahedra / SAP",
+    "no_contact": false,
+    "solver": "genesis",
+    "genesis_cpu_threads": 4,
+    "dt_s": 0.005,
+    "controller": {
+      "kp_N_m": 1000,
+      "kv_N_s_m": 20.015940172510145,
+      "armature_kg": 0.1,
+      "force_limit_N": 2,
+      "load_time_s": 0.2,
+      "hold_time_s": 0.1,
+      "travel_m": 0.002,
+      "initial_gap_m": 0.001
+    },
+    "material_parameters": {
+      "E_Pa": 100000.0,
+      "nu": 0.45,
+      "density_kg_m3": 1000.0
+    },
+    "hydro_modulus_Pa": 1000000.0,
+    "sap_stiffness_Pa_m": 1000000000000.0,
+    "solver_options": {
+      "sap": {
+        "n_sap_iterations": 30,
+        "n_pcg_iterations": 1000,
+        "n_linesearch_iterations": 10,
+        "sap_convergence_atol": 1e-12,
+        "sap_convergence_rtol": 1e-08,
+        "sap_taud": 0.1,
+        "sap_beta": 1.0,
+        "sap_sigma": 0.001,
+        "pcg_relative_tolerance": 1e-06,
+        "pcg_threshold": 1e-20,
+        "linesearch_ftol": 1e-12,
+        "linesearch_max_step_size": 1.5,
+        "hydroelastic_stiffness": 1000000000000.0,
+        "point_contact_stiffness": 100000000.0,
+        "fem_floor_contact_type": "none",
+        "enable_fem_self_tet_contact": false,
+        "rigid_floor_contact_type": "none",
+        "enable_rigid_fem_contact": true,
+        "rigid_rigid_contact_type": "none"
+      },
+      "fem": {
+        "dt": null,
+        "gravity": null,
+        "damping": 0.0,
+        "floor_height": null,
+        "use_implicit_solver": true,
+        "n_newton_iterations": 20,
+        "n_pcg_iterations": 1000,
+        "pcg_relative_tolerance": 1e-06,
+        "newton_force_atol": 1e-09,
+        "newton_force_rtol": 1e-06,
+        "n_linesearch_iterations": 10,
+        "newton_dx_threshold": 1e-06,
+        "pcg_threshold": 1e-18,
+        "linesearch_c": 0.0001,
+        "linesearch_tau": 0.5,
+        "damping_alpha": 0.0,
+        "damping_beta": 0.0,
+        "enable_vertex_constraints": true
+      }
+    }
+  },
+  "source_sha256": {
+    "coupler_source_sha256": "134fef141e51a4f1b65a46902224794778257ebc6d47bb662430f65c84eadfdd",
+    "fem_source_sha256": "4cbe549851bfc6ee4f3fa16c9a88c332d43b85f234dd9a1d674ce47833e54338",
+    "adapter_sha256": "bab572c4032ddcbc2a5d8f02c226fe63d79acad4ab3a2ac3a8a3592682b3f87a",
+    "script_sha256": "b72922436e32ffde63deb6d3571d7b9c325e4c8d7073f9aaab3f20aa20be1187"
+  },
+  "common_domain_verified": true,
+  "common_support_verified": true,
+  "identical_configuration": true,
+  "load_path_matched": false,
+  "common_recorded_horizon_s": 0.24,
+  "max_same_time_travel_difference_m": 5.000545962413833e-05,
+  "max_same_time_velocity_difference_m_s": 0.0008545092490291027,
+  "boundary_centroid_distance_max_m": [
+    1.2843938601647471e-15,
+    2.3531083501371032e-15,
+    2.3531083501371032e-15
+  ],
+  "levels": [
+    {
+      "id": "mesh-coarse",
+      "nodes": 3038,
+      "elements": 9674,
+      "h_rms_m": 0.004590424782981199,
+      "h_max_m": 0.016284562471184667,
+      "min_element_mean_ratio": 0.0016723687904023274,
+      "volume_m3": 1.264191267619912e-06,
+      "complete": true,
+      "incomplete_reason": null,
+      "sap_converged": true,
+      "fem_prediction_converged": true,
+      "max_relative_force_residual": 0.4570717601680899,
+      "measured_max_relative_force_residual": 0.4570717601680899,
+      "max_penetration_m": 0.00012968371099666466,
+      "completed_steps": 60,
+      "min_jacobian": 0.797524593200112,
+      "reference_max_sampled_depth_m": 0.0014597383318277583
+    },
+    {
+      "id": "mesh-edge1",
+      "nodes": 6295,
+      "elements": 31768,
+      "h_rms_m": 0.002476131648642816,
+      "h_max_m": 0.011591518450569037,
+      "min_element_mean_ratio": 0.001787747205105328,
+      "volume_m3": 1.2641912676199117e-06,
+      "complete": true,
+      "incomplete_reason": null,
+      "sap_converged": true,
+      "fem_prediction_converged": true,
+      "max_relative_force_residual": 0.5317905520265902,
+      "measured_max_relative_force_residual": 0.5317905520265902,
+      "max_penetration_m": 9.778852336014277e-05,
+      "completed_steps": 60,
+      "min_jacobian": 0.8110782707071069,
+      "reference_max_sampled_depth_m": 0.0014597383318277583
+    },
+    {
+      "id": "mesh-edge2",
+      "nodes": 20654,
+      "elements": 103279,
+      "h_rms_m": 0.0015022919558824494,
+      "h_max_m": 0.00809561185368094,
+      "min_element_mean_ratio": 0.0013199127949203094,
+      "volume_m3": 1.264191267619912e-06,
+      "complete": false,
+      "incomplete_reason": "RuntimeError: Time budget exceeded; valid prefix retained",
+      "sap_converged": true,
+      "fem_prediction_converged": true,
+      "max_relative_force_residual": 0.6402525687589818,
+      "measured_max_relative_force_residual": 0.6402525687589818,
+      "max_penetration_m": 7.839308890116126e-05,
+      "completed_steps": 48,
+      "min_jacobian": 0.6192009107750845,
+      "reference_max_sampled_depth_m": 0.0014609202527936368
+    }
+  ],
+  "pairs": [
+    {
+      "coarse": "mesh-coarse",
+      "fine": "mesh-edge1",
+      "samples": [
+        {
+          "travel_m": 0.0012,
+          "displacement_relative_l2": 0.07751928661341748,
+          "displacement_max_m": 1.4596852004600969e-05,
+          "reaction_relative": 0.447350585353229,
+          "energy_relative": 0.4233886322356753,
+          "coarse_time_s": 0.10617708369359297,
+          "fine_time_s": 0.10608241985571905,
+          "interpolation_uncertainty_m": [
+            3.9558927887637103e-07,
+            6.659905869342092e-07
+          ]
+        },
+        {
+          "travel_m": 0.0015,
+          "displacement_relative_l2": 0.061197061031427726,
+          "displacement_max_m": 4.35846713969491e-05,
+          "reaction_relative": 0.4102549016452868,
+          "energy_relative": 0.39856519159735043,
+          "coarse_time_s": 0.1254416094826255,
+          "fine_time_s": 0.12464482838057107,
+          "interpolation_uncertainty_m": [
+            3.90041079437474e-08,
+            5.21784199451933e-08
+          ]
+        },
+        {
+          "travel_m": 0.00175,
+          "displacement_relative_l2": 0.05949733400688631,
+          "displacement_max_m": 6.085242844029981e-05,
+          "reaction_relative": 0.38459668675661834,
+          "energy_relative": 0.3738901684505506,
+          "coarse_time_s": 0.1486352716797136,
+          "fine_time_s": 0.1459448805574458,
+          "interpolation_uncertainty_m": [
+            5.884283420834666e-08,
+            5.4141270887276305e-08
+          ]
+        }
+      ],
+      "displacement_relative_l2": 0.07751928661341748,
+      "displacement_max_m": 6.085242844029981e-05,
+      "reaction_relative": 0.447350585353229,
+      "energy_relative": 0.4233886322356753
+    },
+    {
+      "coarse": "mesh-edge1",
+      "fine": "mesh-edge2",
+      "samples": [
+        {
+          "travel_m": 0.0012,
+          "displacement_relative_l2": 0.1599138495388584,
+          "displacement_max_m": 3.2727478420754585e-05,
+          "reaction_relative": 0.41029310018460374,
+          "energy_relative": 0.44228284148545915,
+          "coarse_time_s": 0.10608241985571905,
+          "fine_time_s": 0.10602140850976557,
+          "interpolation_uncertainty_m": [
+            6.659905869342092e-07,
+            1.999792522289073e-06
+          ]
+        },
+        {
+          "travel_m": 0.0015,
+          "displacement_relative_l2": 0.05381943202617328,
+          "displacement_max_m": 4.554349401373552e-05,
+          "reaction_relative": 0.267872010371612,
+          "energy_relative": 0.2703485368168717,
+          "coarse_time_s": 0.12464482838057107,
+          "fine_time_s": 0.12425325296344533,
+          "interpolation_uncertainty_m": [
+            5.21784199451933e-08,
+            1.5302066839030695e-07
+          ]
+        },
+        {
+          "travel_m": 0.00175,
+          "displacement_relative_l2": 0.048263878174478234,
+          "displacement_max_m": 5.366100029476706e-05,
+          "reaction_relative": 0.24900030621671188,
+          "energy_relative": 0.24081247331871708,
+          "coarse_time_s": 0.1459448805574458,
+          "fine_time_s": 0.14465727112898558,
+          "interpolation_uncertainty_m": [
+            5.4141270887276305e-08,
+            3.13346754621098e-08
+          ]
+        }
+      ],
+      "displacement_relative_l2": 0.1599138495388584,
+      "displacement_max_m": 5.366100029476706e-05,
+      "reaction_relative": 0.41029310018460374,
+      "energy_relative": 0.44228284148545915
+    }
+  ],
+  "comparison_scope": "Exact reference-domain L2 integral of nested P1 FE field difference; nodal Linf on the fine mesh; first-loading-branch travel interpolation. Matched travel remains diagnostic when dynamic histories differ."
+}
