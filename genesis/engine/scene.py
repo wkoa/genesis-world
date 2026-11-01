@@ -1581,6 +1581,8 @@ class Scene(RBC):
         # A scene holding what alters the simulation is rejected, since a file leaving it out would restore other
         # physics. Everything else is left out with a warning: what observes or draws the simulation, and every
         # callback. Every solver holds the same force fields, so one solver names them all.
+        if getattr(self._sim.coupler, "_geometric_contact_solver", None) is not None:
+            gs.raise_exception("Research geometric contact backend cannot be exported yet")
         rejected_kinds = Counter(type(entity).__name__ for entity in self.entities if entity.desc is None)
         rejected_kinds.update(type(emitter).__name__ for emitter in self._emitters)
         rejected_kinds.update(type(force_field).__name__ for force_field in self._sim.solvers[0].force_fields)
@@ -1838,6 +1840,8 @@ class Scene(RBC):
         state : SceneCheckpoint
             The state to put back, as read by '__getstate__' or cut from a trajectory frame.
         """
+        if getattr(self._sim.coupler, "_geometric_contact_solver", None) is not None:
+            gs.raise_exception("Research geometric contact backend cannot restore a serialized scene")
         if state.layout != self._layout:
             gs.raise_exception(
                 f"The state was read from a scene built with {state.layout} and this one was built with {self._layout}."

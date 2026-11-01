@@ -419,7 +419,8 @@ class FEMEntity(Entity):
             verts, elems = eu.mesh_to_elements(surface_trimesh, tet_cfg=self.tet_cfg)
             if is_mesh_morph:
                 verts = verts + self._morph.pos
-            verts, elems = eu.split_all_surface_tets(verts, elems)
+            if self._solver._options.split_surface_tets:
+                verts, elems = eu.split_all_surface_tets(verts, elems)
 
         self.instantiate(verts, elems)
 

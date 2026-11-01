@@ -330,7 +330,23 @@ class SAPCoupler(NonlinearFEMMixin, RBC):
             self._build_nonlinear_fem()
 
     def reset(self, envs_idx=None):
-        pass
+        backend = getattr(self, "_geometric_contact_solver", None)
+        if backend is not None:
+            backend.reset()
+        # Contact slots are global scratch rebuilt at preprocess, not checkpointed history.
+        # Partial resets conservatively invalidate all last-step contact diagnostics.
+        if hasattr(self, "has_contact"):
+            del self.has_contact
+        for contact in getattr(self, "contact_handlers", ()):
+            contact.n_contact_pairs.fill(0)
+        for name in ("fem_state_v", "rigid_state_dof"):
+            state = getattr(self, name, None)
+            if state is not None:
+                state.impulse.fill(0)
+        if hasattr(self, "_nl_status"):
+            self._nl_status = "not_evaluated"
+            self._nl_iterations = 0
+            self._nl_backtracks = 0
 
     def _init_tet_tables(self):
         # Lookup table for marching tetrahedra edges
@@ -713,7 +729,20 @@ class SAPCoupler(NonlinearFEMMixin, RBC):
             contact.compute_jacobian(links_info=links_info, dofs_state=dofs_state, links_state=links_state)
         return has_contact, overflow
 
+    def set_geometric_contact_solver(self, solver):
+        """Attach an explicit research backend; stateful observers remain unsupported."""
+        if not self.options.nonlinear_fem:
+            gs.raise_exception("Geometric contact backend requires nonlinear_fem")
+        self._geometric_contact_solver = solver
+
     def couple(self, i_step):
+        backend = getattr(self, "_geometric_contact_solver", None)
+        if backend is not None:
+            if not getattr(self.sim, "_checked_step_active", False):
+                gs.raise_exception("Geometric contact solver requires CheckedStep rollback")
+            backend.solve(i_step, self)
+            self.update_vel(i_step, dofs_state=self.rigid_solver.dyn_state.dofs)
+            return
         if self.has_contact:
             self.sap_solve(i_step)
             self.update_vel(i_step, dofs_state=self.rigid_solver.dyn_state.dofs)
@@ -725,6 +754,9 @@ class SAPCoupler(NonlinearFEMMixin, RBC):
         the final velocity update has not been re-evaluated. Unsolved steps never
         expose previous-step diagnostics. This does not certify FEM convergence.
         """
+        backend = getattr(self, "_geometric_contact_solver", None)
+        if backend is not None:
+            return [backend.stats()]
         evaluated = hasattr(self, "has_contact")
         if not evaluated or not self.has_contact:
             return [

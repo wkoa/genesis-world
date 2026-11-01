@@ -201,8 +201,8 @@ class NonlinearFEMMixin:
                 self._nl_base_rigid[0, d] + alpha * self.pcg_rigid_state_dof.x[0, d]
             )
 
-    @qd.kernel
-    def _nl_objective(
+    @qd.func
+    def _nl_free_energy(
         self,
         f: qd.i32,
         dofs_state: array_class.DofsState,
@@ -229,5 +229,28 @@ class NonlinearFEMMixin:
         self.compute_rigid_energy(
             self._nl_energy, dofs_state=dofs_state, rigid_info=rigid_info
         )
+
+    @qd.kernel
+    def _nl_unconstrained_objective(
+        self, f: qd.i32, dofs_state: array_class.DofsState,
+        rigid_info: array_class.RigidInfo,
+    ):
+        self._nl_free_energy(f, dofs_state, rigid_info)
+
+    @qd.kernel
+    def _nl_objective(
+        self, f: qd.i32, dofs_state: array_class.DofsState,
+        rigid_info: array_class.RigidInfo,
+    ):
+        self._nl_free_energy(f, dofs_state, rigid_info)
         for contact in qd.static(self.contact_handlers):
             contact.compute_energy(self._nl_energy)
+
+    @qd.kernel
+    def _nl_fem_hessian_product(self, src: qd.types.ndarray()):
+        for v in range(self.fem_solver.n_vertices):
+            for j in qd.static(range(3)):
+                self.pcg_fem_state_v.p[0, v][j] = src[v, j]
+        self.compute_fem_matrix_vector_product(
+            self.pcg_fem_state_v.p, self.pcg_fem_state_v.Ap, self.batch_active
+        )

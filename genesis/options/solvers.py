@@ -898,12 +898,19 @@ class FEMOptions(GravityMixin, TimeBasedMixin):
         Rayleigh Damping factor for the implicit solver. Defaults to 0.5. Only used when `use_implicit_solver` is True.
     damping_beta : float, optional
         Rayleigh Damping factor for the implicit solver. Defaults to 5e-4. Only used when `use_implicit_solver` is True.
+    split_surface_tets : bool, optional
+        Enrich all-boundary tetrahedra with interior centroids. Defaults to True.
+        Disable only when the selected contact model does not require this enrichment.
+        The supplied mesh must still contain valid internal vertices for pressure initialization.
     enable_vertex_constraints : bool, optional
         Whether to enable vertex constraints. Defaults to False.
     """
 
     damping: NonNegativeFloat = 0.0
     floor_height: float | None = None
+    # Preserve the historical hydroelastic mesh enrichment unless explicitly disabled.
+    # Geometric contact may use the exact input volume mesh without centroid splits.
+    split_surface_tets: StrictBool = True
     use_implicit_solver: StrictBool = False
     n_newton_iterations: PositiveInt = 1
     n_pcg_iterations: PositiveInt = 500
