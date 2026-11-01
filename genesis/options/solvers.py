@@ -127,6 +127,13 @@ class SAPCouplerOptions(BaseCouplerOptions):
     pcg_relative_tolerance : float, optional
         Relative tolerance on the PCG residual norm (not squared). Defaults to 0,
         preserving absolute-only stopping. Uses max(pcg_threshold, rtol**2 * initial_rTr).
+    nonlinear_fem : bool, optional
+        Experimental nonlinear FEM objective in the velocity solve. Default False.
+        Single environment/substep, zero FEM damping, isolated rigid-FEM contact.
+        Uses updated elasticity and energy backtracking, but frozen contact geometry.
+        This does not provide continuous collision or nonpenetration guarantees.
+    nonlinear_backtracking_iterations : int, optional
+        Maximum energy backtracking trials for nonlinear_fem. Default 20.
     linesearch_ftol : float, optional
         Line search sufficient value close to zero for exact linesearch. Defaults to 1e-6.
     linesearch_max_step_size : float, optional
@@ -154,6 +161,8 @@ class SAPCouplerOptions(BaseCouplerOptions):
     n_sap_iterations: PositiveInt = 5
     n_pcg_iterations: PositiveInt = 100
     n_linesearch_iterations: PositiveInt = 10
+    nonlinear_fem: StrictBool = False
+    nonlinear_backtracking_iterations: PositiveInt = 20
     sap_convergence_atol: PositiveFloat = 1e-6
     sap_convergence_rtol: PositiveFloat = 1e-5
     sap_taud: PositiveFloat = 0.1

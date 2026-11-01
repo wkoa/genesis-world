@@ -13,6 +13,7 @@ import genesis.utils.element as eu
 import genesis.utils.geom as gu
 from genesis.constants import IntEnum
 from genesis.engine.bvh import build_bvh, func_bvh_query_leaves, func_no_filter, get_bvh_data
+from genesis.engine.couplers.nonlinear_fem import NonlinearFEMMixin
 from genesis.options.solvers import SAPCouplerOptions
 from genesis.repr_base import RBC
 
@@ -166,7 +167,7 @@ def tet_barycentric(p, tet_vertices):
 
 
 @qd.data_oriented
-class SAPCoupler(RBC):
+class SAPCoupler(NonlinearFEMMixin, RBC):
     """
     This class handles all the coupling between different solvers using the
     Semi-Analytic Primal (SAP) contact solver used in Drake.
@@ -325,6 +326,8 @@ class SAPCoupler(RBC):
         self._init_sap_fields()
         self._init_pcg_fields()
         self._init_linesearch_fields()
+        if self.options.nonlinear_fem:
+            self._build_nonlinear_fem()
 
     def reset(self, envs_idx=None):
         pass
@@ -761,6 +764,13 @@ class SAPCoupler(RBC):
                     "last_pcg_iterations": int(pcg["iterations"][b]),
                 }
             )
+        if getattr(getattr(self, "options", None), "nonlinear_fem", False):
+            for value in values:
+                value.update(fem_objective="nonlinear", contact_configuration="frozen_preprocess",
+                             nonlinear_status=self._nl_status, nonlinear_iterations=self._nl_iterations,
+                             nonlinear_backtracks=self._nl_backtracks)
+                if self._nl_status == "line_search_failed" and value["status"] != "converged":
+                    value["status"] = "line_search_failed"
         return values
 
     @qd.kernel
@@ -890,6 +900,9 @@ class SAPCoupler(RBC):
     # ------------------------------------------------------------------------------------
 
     def sap_solve(self, i_step):
+        if self.options.nonlinear_fem:
+            self._solve_nonlinear_fem(i_step)
+            return
         self.pcg_state.fill(0)
         self._init_sap_solve(i_step, dofs_state=self.rigid_solver.dyn_state.dofs)
         for iter in range(self._n_sap_iterations):
