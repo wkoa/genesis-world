@@ -120,6 +120,20 @@ class CheckedStepTests(unittest.TestCase):
         self.assertEqual(observed, [True])
         self.assertFalse(self.scene.sim._checked_step_active)
 
+    def test_backend_registration_cannot_silently_switch_physics(self):
+        from types import SimpleNamespace
+        from genesis.engine.couplers.sap_coupler import SAPCoupler
+        def owner(steps=0):
+            return SimpleNamespace(options=gs.options.SAPCouplerOptions(nonlinear_fem=True),
+                                   sim=SimpleNamespace(steps=np.array([steps])))
+        backend = SimpleNamespace(solve=lambda *args: None, stats=lambda: {}, reset=lambda: None)
+        target = owner()
+        SAPCoupler.set_geometric_contact_solver(target, backend)
+        self.assertIs(target._geometric_contact_solver, backend)
+        for target, value in [(target, backend), (owner(1), backend), (owner(), None), (owner(), object())]:
+            with self.assertRaises(gs.GenesisException):
+                SAPCoupler.set_geometric_contact_solver(target, value)
+
     def test_preserve_input_mesh_is_explicit(self):
         self.assertTrue(gs.options.FEMOptions().split_surface_tets)
         self.assertFalse(gs.options.FEMOptions(split_surface_tets=False).split_surface_tets)

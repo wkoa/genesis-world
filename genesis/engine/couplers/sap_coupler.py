@@ -730,9 +730,14 @@ class SAPCoupler(NonlinearFEMMixin, RBC):
         return has_contact, overflow
 
     def set_geometric_contact_solver(self, solver):
-        """Attach an explicit research backend; stateful observers remain unsupported."""
+        """Register once before the first step; no implicit runtime fallback."""
         if not self.options.nonlinear_fem:
             gs.raise_exception("Geometric contact backend requires nonlinear_fem")
+        if solver is None or not all(callable(getattr(solver, name, None)) for name in ("solve", "stats", "reset")):
+            gs.raise_exception("A geometric backend must implement solve, stats and reset")
+        if bool(self.sim.steps.any()) or getattr(self, "_geometric_contact_solver", None) is not None:
+            gs.raise_exception("Geometric backend registration requires a fresh scene before stepping")
+        solver.reset()
         self._geometric_contact_solver = solver
 
     def couple(self, i_step):

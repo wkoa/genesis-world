@@ -7,6 +7,8 @@ The current experimental host Newton/PCG and geometric-potential adapter live
 in the Studio simulation research scripts, not in the installed Genesis package.
 
 `SAPCoupler.set_geometric_contact_solver(backend)` requires `nonlinear_fem`.
+Registration is once before stepping; None, replacement and late registration
+are rejected to prevent an implicit switch back to the original contact law.
 The backend implements `solve(f, coupler)`, `stats()` and `reset()`. It replaces
 the frozen contact projection during coupling, including steps with no original
 contact slots. Call through `CheckedStep.run(command, validate)`; a backend
@@ -53,7 +55,7 @@ reducing 3,038 nodes/9,674 tets to 827/3,041. This is not a convergence claim.
 Real fixture checks include full 60-step press/hold paths and injected rejection
 in contact, with bitwise restored arrays and identical repeated candidates.
 Closed-form nodal force balance and actual rigid momentum are checked separately.
-Native regression: 22 tests pass, including rollback, error flags, nesting,
+Native regression: 23 tests pass, including rollback, error flags, nesting,
 export rejection, constitutive derivatives and existing solver diagnostics.
 Default-path FP64 body trajectories match the recorded prior run bitwise.
 
