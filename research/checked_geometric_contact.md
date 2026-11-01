@@ -27,9 +27,15 @@ Full scene export/checkpoint and serialized scene restore reject an attached
 research backend rather than silently omitting it. The backend must not keep
 uncheckpointed physical history; the current adapter rebuilds contact data.
 There is no automatic step-size change or geometry projection on failure.
+The host adapter starts Newton from a CCD-limited native free prediction; scaling
+this initializer does not change the time step or commit a clipped physical state.
 
 The validated adapter scope is one normal translating head, fixed supports,
 zero friction/damping/gravity and polynomial Stable Neo-Hookean elasticity.
+The final isolated adapter applies its normal potential to head/body pairs only.
+Body-self CCD remains active, but a body-self reaction law is not supplied: a
+motion requiring it must fail the feasible solve rather than acquire an invented
+reaction. This avoids unloaded prestress from neighboring parts of one body.
 It rebuilds a normal geometric barrier and its derivatives per candidate, uses
 native elasticity and a shared energy line search, limits motion with CCD and
 positive-J checks, and assembles interval impulses from the accepted potential
