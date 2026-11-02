@@ -60,6 +60,26 @@ class NonlinearFEMMixin:
             fem.batch_active.from_numpy(flags)
         return True
 
+    def _nl_refresh_energy(self, f):
+        """Refresh the same undamped objective without touching force/tangent scratch."""
+        self._nl_update_positions(f)
+        if not np.isfinite(self._nl_min_j[None]) or self._nl_min_j[None] <= 0:
+            return False
+        flags = self.fem_solver.batch_linesearch_active.to_numpy().copy()
+        try:
+            self._nl_energy_only(f, dofs_state=self.rigid_solver.dyn_state.dofs,
+                                 rigid_info=self.rigid_solver.rigid_info)
+            return bool(np.isfinite(self._nl_energy[0]))
+        finally:
+            self.fem_solver.batch_linesearch_active.from_numpy(flags)
+
+    @qd.kernel
+    def _nl_energy_only(self, f: qd.i32, dofs_state: array_class.DofsState,
+                        rigid_info: array_class.RigidInfo):
+        self.fem_solver.batch_linesearch_active.fill(True)
+        self.fem_solver._func_compute_ele_energy(f)
+        self._nl_free_energy(f, dofs_state, rigid_info)
+
     def _nl_refresh_gradient(self, f):
         self.batch_active.fill(True)
         if not self._refresh_nonlinear_fem(f):

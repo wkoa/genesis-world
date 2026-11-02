@@ -150,3 +150,14 @@ python -m unittest tests.deformable.test_mesh_convergence -v
 ```
 
 A rejected study exits with code 2. Unit fixtures exercise policy only and are not physical data.
+
+## Energy-only backtracking candidate (2026-11-02)
+
+Research source 1.4.5+simulation.5 exposes `_nl_refresh_energy(f)` for the isolated
+undamped single-environment/substep geometric backend. It updates candidate positions,
+rejects nonpositive/nonfinite J, recomputes material energy with the existing energy
+function, and evaluates the same unconstrained inertial/elastic/rigid objective.
+It preserves FEM derivative/tangent scratch and restores the linesearch mask.
+The caller must refresh derivatives at every next Newton iterate; energy evaluation
+does not certify force equilibrium or replace CCD/line search/transaction rollback.
+No default native solver or registered Studio runtime is switched.

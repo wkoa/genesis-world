@@ -115,6 +115,14 @@ class NonlinearCouplingTests(unittest.TestCase):
             coupler._nl_refresh_gradient(f)
             g = coupler.fem_state_v.gradient.to_numpy()[0]
             gr = coupler.rigid_state_dof.gradient.to_numpy()[0]
+            coupler._nl_unconstrained_objective(f, dofs_state=scene.sim.rigid_solver.dyn_state.dofs,
+                                               rigid_info=scene.sim.rigid_solver.rigid_info)
+            original_energy = float(coupler._nl_energy[0])
+            tangent = coupler.fem_solver.elements_el_hessian.to_numpy().copy()
+            self.assertTrue(coupler._nl_refresh_energy(f))
+            self.assertAlmostEqual(float(coupler._nl_energy[0]), original_energy, delta=1e-15)
+            np.testing.assert_array_equal(coupler.fem_solver.elements_el_hessian.to_numpy(), tangent)
+            np.testing.assert_array_equal(coupler.fem_state_v.gradient.to_numpy()[0], g)
             analytic = float(np.sum(g * direction) + gr @ rigid)
             coupler.batch_linesearch_active.fill(True)
             epsilon = 1e-4
@@ -138,10 +146,12 @@ class NonlinearCouplingTests(unittest.TestCase):
             inverted[0, free, 2] -= 100.0
             coupler.fem_state_v.v.from_numpy(inverted)
             self.assertFalse(coupler._refresh_nonlinear_fem(f))
+            self.assertFalse(coupler._nl_refresh_energy(f))
             invalid = backup.copy()
             invalid[0, free[0], 0] = np.nan
             coupler.fem_state_v.v.from_numpy(invalid)
             self.assertFalse(coupler._refresh_nonlinear_fem(f))
+            self.assertFalse(coupler._nl_refresh_energy(f))
             coupler.fem_state_v.v.from_numpy(backup)
             self.assertTrue(coupler._refresh_nonlinear_fem(f))
         finally:
